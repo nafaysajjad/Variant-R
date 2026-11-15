@@ -282,7 +282,7 @@ export async function mount(el, ctx) {
           ${HORIZONS.map((y) => `<button type="button" data-horizon="${y}" aria-pressed="false">${y}</button>`).join('')}
         </div>
         <button type="button" class="f4-btn" data-ref="overlayBtn" aria-pressed="false">Show Predicted Zones</button>
-        <button type="button" class="f4-btn f4-btn--ghost" data-ref="aiBtn">Refresh AI Brief</button>
+        <button type="button" class="f4-btn f4-btn--ghost" data-ref="aiBtn"> </button>
       </div>
       <div class="f4-scenario">
         <label class="f4-slider-wrap">
