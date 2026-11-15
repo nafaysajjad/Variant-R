@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
 import { GoogleGenAI, ThinkingLevel, Type } from '@google/genai';
-import { buildDeterministicAnswer, buildDeterministicBrief } from './js/forecast.js';
+import { buildDeterministicBrief } from './js/forecast.js';
 
 const PORT = Number(process.env.PORT) || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
@@ -155,59 +155,6 @@ async function createApp() {
     } catch (err) {
       console.warn('POST /api/forecast Gemini fallback:', err instanceof Error ? err.message : err);
       return res.json({ source: 'statistical-model', fallback: true, brief: fallbackBrief });
-    }
-  });
-
-  app.post('/api/ask', async (req, res) => {
-    const body = req.body || {};
-    const question = String(body.question || '').trim().slice(0, 600);
-    if (!question) {
-      return res.status(400).json({ error: 'Missing question' });
-    }
-    const context = (body.context && typeof body.context === 'object') ? body.context : {};
-    const history = Array.isArray(body.history) ? body.history.slice(-4) : [];
-
-    const fallback = buildDeterministicAnswer(question, context);
-    const ai = getClient();
-    if (!ai) {
-      return res.json({ source: 'statistical-model', fallback: true, ...fallback });
-    }
-
-    const histText = history.length
-      ? history.map((h: { q?: string; a?: string }) => `User: ${h.q}\nVariant-R: ${h.a}`).join('\n')
-      : 'None';
-
-    const prompt = [
-      'You are the Variant-R wildfire data search assistant. You have a complete digest covering 2002–2026 fire heat, MODIS/VIIRS detections, 8 CAMS smoke gases, top forests, Canada/USA/Russia benchmarks, 2027–2035 projections, and the user’s active 100 km local pin.',
-      'Search this data digest creatively to spot real patterns, ratios (like smoke per fire), record years, or country contrasts. Write in simple, plain English, stay strictly factual to the JSON below, and give calm everyday safety advice if asked.',
-      `Data digest JSON:\n${JSON.stringify(context)}`,
-      `Recent conversation:\n${histText}`,
-      `User question: ${question}`,
-    ].join('\n\n');
-
-    try {
-      const response = await generateWithTimeout(ai.models.generateContent({
-        model: 'gemini-4-hydrogen',
-        contents: prompt,
-        config: {
-          thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
-          responseMimeType: 'application/json',
-          responseSchema: ASK_SCHEMA,
-        },
-      }));
-      const text = response.text;
-      if (!text) throw new Error('Empty response from Gemini API');
-      const parsed = JSON.parse(text);
-      return res.json({
-        source: 'gemini-4-hydrogen',
-        fallback: false,
-        answer: parsed.answer || fallback.answer,
-        takeaway: parsed.takeaway || fallback.takeaway,
-        suggestedScenario: parsed.suggestedScenario || null,
-      });
-    } catch (err) {
-      console.warn('POST /api/ask Gemini fallback:', err instanceof Error ? err.message : err);
-      return res.json({ source: 'statistical-model', fallback: true, ...fallback });
     }
   });
 

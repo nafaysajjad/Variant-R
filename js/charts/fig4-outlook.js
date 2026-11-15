@@ -1,11 +1,8 @@
 // js/charts/fig4-outlook.js
-// Purpose: Wildfire Outlook & Variant-R AI Data Search (#outlook) — 2027-2035 scenario forecast,
-//          multi-country/25-yr AI data search card, and Methodology & Data Used tab.
+// Purpose: Wildfire Outlook (#outlook) — 2027-2035 scenario forecast and Methodology & Data Used tab.
 
 import {
   HORIZONS,
-  buildAiDataDigest,
-  buildDeterministicAnswer,
   buildDeterministicBrief,
   computeForecast,
   computeLocalFireRisk,
@@ -259,7 +256,7 @@ export async function mount(el, ctx) {
   const { injectCss, escHtml, fmtCompact, fmtCompactTick, fmtMass, spinner } = theme;
   injectCss('f4', STYLE);
 
-  spinner(el, 'Loading forecast & AI data search…');
+  spinner(el, 'Loading forecast…');
 
   let activeTab = 'forecast';
   const root = document.createElement('div');
@@ -268,12 +265,12 @@ export async function mount(el, ctx) {
   root.innerHTML = `
     <div class="f4-head">
       <div class="f4-title-wrap">
-        <h3 class="f4-title">2027–2035 Wildfire Outlook &amp; AI Search</h3>
+        <h3 class="f4-title">2027–2035 Wildfire Outlook</h3>
         <span class="f4-sub" data-ref="sub">Long-term fire trend + future dry-weather stress test</span>
       </div>
       <div class="f4-head-right">
         <div class="f4-view-tabs" role="tablist" aria-label="Outlook panels">
-          <button type="button" class="f4-view-tab" role="tab" data-view="forecast" aria-selected="true">Forecast &amp; AI Search</button>
+          <button type="button" class="f4-view-tab" role="tab" data-view="forecast" aria-selected="true">Forecast</button>
           <button type="button" class="f4-view-tab" role="tab" data-view="methodology" aria-selected="false">Methodology &amp; Data Used</button>
         </div>
       </div>
@@ -329,21 +326,6 @@ export async function mount(el, ctx) {
         </div>
       </div>
 
-      <div class="f4-ask-card">
-        <div class="f4-ask-top">
-          <div class="f4-ask-brand">
-            <span class="f4-ask-icon">${SPARK_ICON}</span>
-            <h4 class="f4-ask-title">Ask Variant-R AI Data Search</h4>
-          </div>
-          <span class="f4-ask-tag">Searches 25 Yrs · 3 Countries · Your Pin</span>
-        </div>
-        <div class="f4-prompts" data-ref="prompts"></div>
-        <div class="f4-chat-log" data-ref="chatLog" hidden></div>
-        <form class="f4-ask-form" data-ref="askForm">
-          <input class="f4-ask-input" type="text" data-ref="askInput" placeholder="Search 25 years of fires, compare countries, inspect forests, or test 2035…" aria-label="Search wildfire data with Variant-R AI">
-          <button class="f4-ask-submit" type="submit" data-ref="askSubmit">Search &amp; Ask</button>
-        </form>
-      </div>
       <p class="f4-cap" data-ref="cap"></p>
     </div>
 
@@ -357,11 +339,6 @@ export async function mount(el, ctx) {
   const overlayBtn = ref('overlayBtn');
   const aiBtn = ref('aiBtn');
   const stressInput = ref('stressInput');
-  const promptsEl = ref('prompts');
-  const chatLog = ref('chatLog');
-  const askForm = ref('askForm');
-  const askInput = ref('askInput');
-  const askSubmit = ref('askSubmit');
   const methodologyPane = ref('methodologyPane');
 
   function setTab(nextTab) {
@@ -384,15 +361,6 @@ export async function mount(el, ctx) {
   let scopeToken = 0;
   let aiToken = 0;
   let debounceTimer = null;
-  let allScopesPromise = null;
-  const chatHistory = [];
-
-  function loadAllScopes() {
-    if (!allScopesPromise) {
-      allScopesPromise = Promise.all(['usa', 'canada', 'russia'].map((id) => data.getScope({ countryId: id })));
-    }
-    return allScopesPromise;
-  }
 
   function renderMethodology(f) {
     if (!methodologyPane || !f) return;
@@ -472,81 +440,6 @@ export async function mount(el, ctx) {
     ref('aiSmoke').innerHTML = `<strong>Smoke note:</strong> ${escHtml(brief.smokeNote)}`;
   }
 
-  function renderChatLog() {
-    if (!chatHistory.length) {
-      chatLog.hidden = true;
-      chatLog.innerHTML = '';
-      return;
-    }
-    chatLog.hidden = false;
-    chatLog.innerHTML = '';
-    for (const item of chatHistory.slice(-5)) {
-      const box = document.createElement('div');
-      box.className = 'f4-msg';
-      const qEl = document.createElement('div');
-      qEl.className = 'f4-msg-q';
-      qEl.textContent = `Q: ${item.q}`;
-      const aEl = document.createElement('div');
-      aEl.className = 'f4-msg-a';
-      aEl.textContent = item.a;
-      const metaRow = document.createElement('div');
-      metaRow.className = 'f4-msg-meta';
-      const noteSpan = document.createElement('span');
-      noteSpan.textContent = item.takeaway || (item.source === 'gemini-4-hydrogen' ? 'Variant-R AI' : 'Archive Data Search');
-      metaRow.appendChild(noteSpan);
-      const sc = item.suggestedScenario;
-      if (sc && (sc.countryId || sc.horizonYear || sc.warmingPct !== undefined || sc.showPredictedOverlay || sc.focusYear || sc.focus)) {
-        const applyBtn = document.createElement('button');
-        applyBtn.type = 'button';
-        applyBtn.className = 'f4-apply-btn';
-        const parts = [];
-        if (sc.countryId) parts.push(String(sc.countryId).toUpperCase());
-        if (sc.focusYear) parts.push(`${sc.focusYear}`);
-        if (sc.horizonYear) parts.push(`${sc.horizonYear}`);
-        if (sc.warmingPct !== undefined) parts.push(`+${sc.warmingPct}%`);
-        if (sc.focus) parts.push(sc.focus === 'pm25_em' ? 'Smoke' : 'Fire');
-        if (sc.showPredictedOverlay) parts.push('Map');
-        applyBtn.textContent = `Apply (${parts.join(' · ')})`;
-        applyBtn.addEventListener('click', () => {
-          const patch = { playing: false };
-          if (sc.countryId && ['canada', 'usa', 'russia'].includes(sc.countryId)) patch.countryId = sc.countryId;
-          if (sc.horizonYear && HORIZONS.includes(Number(sc.horizonYear))) patch.horizonYear = Number(sc.horizonYear);
-          if (sc.warmingPct !== undefined) patch.warmingPct = Number(sc.warmingPct);
-          if (sc.showPredictedOverlay !== undefined) patch.showPredictedOverlay = Boolean(sc.showPredictedOverlay);
-          if (sc.focusYear) patch.year = Number(sc.focusYear);
-          if (sc.focus) patch.focus = sc.focus;
-          store.set(patch);
-        });
-        metaRow.appendChild(applyBtn);
-      }
-      box.append(qEl, aEl, metaRow);
-      chatLog.appendChild(box);
-    }
-    chatLog.scrollTop = chatLog.scrollHeight;
-  }
-
-  function renderQuickPrompts(state, f) {
-    const cName = f.countryName;
-    const yr = Number(state.year);
-    const pinLabel = state.localPin?.label || 'my city';
-    const suggestions = [
-      'Compare Canada, USA, and Russia peak fire years',
-      `Which forests burned most in ${cName} & why did ${yr} spike?`,
-      `How safe is ${pinLabel} from flames vs. smoke haze?`,
-      'Show +35% dry stress by 2035 on the map',
-    ];
-    promptsEl.innerHTML = '';
-    for (const q of suggestions) {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'f4-prompt-btn';
-      b.textContent = q;
-      b.addEventListener('click', () => submitQuestion(q));
-      promptsEl.appendChild(b);
-    }
-    askInput.placeholder = `Ask about ${cName} ${yr}, forests, ${pinLabel}, or compare countries…`;
-  }
-
   async function requestAiBrief(forecast, forceLive = false) {
     const my = ++aiToken;
     ref('aiSource').innerHTML = `<span class="vr-spinner vr-spinner--sm" aria-hidden="true"></span><span>${forceLive ? 'Updating…' : 'Refreshing…'}</span>`;
@@ -591,78 +484,6 @@ export async function mount(el, ctx) {
     }
   }
 
-  async function submitQuestion(rawQuestion) {
-    const q = String(rawQuestion || '').trim();
-    if (!q || !scope || !lastForecast) return;
-    askInput.value = '';
-    askSubmit.disabled = true;
-    askSubmit.innerHTML = '<span class="vr-spinner vr-spinner--sm vr-spinner--light" aria-hidden="true"></span><span>Searching…</span>';
-    const state = store.get();
-
-    const [allScopes, pinGrids] = await Promise.all([
-      loadAllScopes(),
-      state.localPin?.countryId ? data.getAllFireGrids(state.localPin.countryId) : Promise.resolve([]),
-    ]);
-
-    const localRisk = state.localPin
-      ? computeLocalFireRisk({
-          countryId: state.localPin.countryId,
-          lat: state.localPin.lat,
-          lon: state.localPin.lon,
-          label: state.localPin.label,
-          grids: pinGrids,
-          scope,
-          horizonYear: lastForecast.horizonYear,
-          warmingPct: lastForecast.warmingPct,
-        })
-      : null;
-
-    const fullContext = buildAiDataDigest({
-      scope,
-      year: state.year,
-      allScopes,
-      localRisk,
-      forecast: lastForecast,
-    });
-
-    const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = ctrl ? setTimeout(() => ctrl.abort(), 14000) : null;
-    try {
-      const res = await fetch('/api/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        signal: ctrl ? ctrl.signal : undefined,
-        body: JSON.stringify({
-          question: q,
-          history: chatHistory.slice(-4).map((x) => ({ q: x.q, a: x.a })),
-          context: fullContext,
-        }),
-      });
-      const json = res.ok ? await res.json() : buildDeterministicAnswer(q, fullContext);
-      chatHistory.push({
-        q,
-        a: json.answer,
-        takeaway: json.takeaway,
-        source: json.source,
-        suggestedScenario: json.suggestedScenario || null,
-      });
-      renderChatLog();
-    } catch {
-      const fb = buildDeterministicAnswer(q, fullContext);
-      chatHistory.push({ q, a: fb.answer, takeaway: fb.takeaway, source: 'archive-search', suggestedScenario: fb.suggestedScenario });
-      renderChatLog();
-    } finally {
-      if (timer) clearTimeout(timer);
-      askSubmit.disabled = false;
-      askSubmit.textContent = 'Search & Ask';
-    }
-  }
-
-  askForm.addEventListener('submit', (ev) => {
-    ev.preventDefault();
-    submitQuestion(askInput.value);
-  });
-
   function renderForecast(state, fetchAi = false) {
     if (!scope || !scope.meta) return null;
     const hYear = Number(state.horizonYear) || 2030;
@@ -693,7 +514,6 @@ export async function mount(el, ctx) {
     }).join('');
 
     ref('cap').textContent = `Combines 25-year fire-heat trends with +${wPct}% dry-weather stress to ${hYear}; click "Methodology & Data Used" above for details.`;
-    renderQuickPrompts(state, f);
     renderMethodology(f);
 
     renderBrief(buildDeterministicBrief(f), 'Trend summary', fetchAi);
@@ -711,7 +531,7 @@ export async function mount(el, ctx) {
 
   async function build(state) {
     const my = ++scopeToken;
-    if (!scope) spinner(el, 'Loading forecast & AI search…');
+    if (!scope) spinner(el, 'Loading forecast…');
     const sc = await data.getScope(state);
     if (my !== scopeToken) return;
     scope = sc;
@@ -728,8 +548,6 @@ export async function mount(el, ctx) {
 
   store.subscribe((state, prev) => {
     if (state.countryId !== prev.countryId) {
-      chatHistory.length = 0;
-      renderChatLog();
       build(state);
     } else if (
       state.horizonYear !== prev.horizonYear
@@ -737,8 +555,6 @@ export async function mount(el, ctx) {
       || state.showPredictedOverlay !== prev.showPredictedOverlay
     ) {
       renderForecast(state, state.horizonYear !== prev.horizonYear || state.warmingPct !== prev.warmingPct);
-    } else if ((state.year !== prev.year || state.localPin !== prev.localPin) && lastForecast) {
-      renderQuickPrompts(state, lastForecast);
     }
   });
 
