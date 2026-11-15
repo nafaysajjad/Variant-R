@@ -479,7 +479,7 @@ export async function mount(el, ctx) {
       if (timer) clearTimeout(timer);
       if (my === aiToken) {
         aiBtn.disabled = false;
-        aiBtn.textContent = 'Refresh AI Brief';
+        aiBtn.textContent = '';
       }
     }
   }
